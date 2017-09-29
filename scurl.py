@@ -18,7 +18,7 @@ def tryUrl():
 		sys.stdout.write(" "+payl+"\r")
 		sys.stdout.flush()
 		if status_link == 200:
-			print "[+] " + link
+			print "\033[32m[+] \033[0m" + link
 
 r = requests.get(url)
 stat = r.status_code
