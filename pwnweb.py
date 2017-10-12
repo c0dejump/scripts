@@ -1,4 +1,4 @@
-#A python script which pentest a website with CVEs and other stuff...( in developement) 
+#A python script which pentest a website with CVEs and other stuff...( in development) 
 
 import sys, os
 import requests, urllib, urllib2
