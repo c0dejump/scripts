@@ -17,7 +17,7 @@ def curl():
 	curl = raw_input("tester les urls ? y/n : ")   #try urls
 	if curl == "y":
 		#############################
-		from scurl.py import tryUrl
+		from scurl import tryUrl
 		#############################
 		plop = tryUrl(url)
 	else:
