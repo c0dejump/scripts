@@ -13,10 +13,13 @@ def write_response(resp):
     mon_fichier.write(resp)
     mon_fichier.close()
 
-def scurl():
-	scurl = raw_input("tester les urls ? y/n : ")   #try urls
-	if scurl == "y":
-				print "ok"
+def curl(): 
+	curl = raw_input("tester les urls ? y/n : ")   #try urls
+	if curl == "y":
+		#############################
+		from scurl.py import tryUrl
+		#############################
+		plop = tryUrl(url)
 	else:
 		print "nul"
 
@@ -27,7 +30,7 @@ if stat == 200:
 	rob = url+"robots.txt"
 	r_rob = requests.get(rob)
 	if r_rob.status_code == 200: #try robots.txt
-		print "robots.txt found"
+		print "\033[32m[+] \033[0m"+url+"robots.txt/ [found]"
 		affi = raw_input("afficher le contenue de robots.txt ? y/n : ")
 		if affi == 'y':
 			page = urllib.urlopen(rob)
@@ -35,9 +38,9 @@ if stat == 200:
 			page.close()
 			print resp
 			write_response(resp)
-			scurl()
+			curl()
 		else:
-			scurl()
+			curl()
 	else:
 		print "robots.txt not found"
 elif stat == 301:
@@ -46,3 +49,4 @@ elif stat == 302:
 	print "Moved Temporarily"
 else:
 	print "url not found"
+
