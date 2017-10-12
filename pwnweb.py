@@ -19,7 +19,7 @@ def curl():
 		#############################
 		from scurl import tryUrl
 		#############################
-		plop = tryUrl(url)
+		plop = tryUrl()
 	else:
 		print "nul"
 
