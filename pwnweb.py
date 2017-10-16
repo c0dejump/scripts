@@ -9,8 +9,8 @@ import time
 url = sys.argv[1]
 
 def write_response(resp):
-    mon_fichier = open("reponse.txt", "w")    #Download file
-    mon_fichier.write(resp)
+    mon_fichier = open("robots.txt", "w")  #Download file
+    mon_fichier.write(resp.replace('Disallow: /','').replace('#','').replace(' ','').replace('Disallow:*',''))
     mon_fichier.close()
 
 def scurl(): 
@@ -37,8 +37,18 @@ if stat == 200:
 			page.close()
 			print resp
 			write_response(resp)
-			curl = raw_input("tester les urls ? y/n : ")   #try urls
+			curl = raw_input("tester les urls ? y/n : \n")   #try urls
 			if curl == "y":
+				print("test url robots.txt")
+				payl_Rob = open("robots.txt","r").read().split("\n")
+				for paylo in payl_Rob:
+					link = url + paylo
+					req = requests.get(link)
+					status_link = req.status_code
+					sys.stdout.write(" "+paylo+"\r")
+					sys.stdout.flush()
+					if status_link == 200 and "404" not in req.text:
+						print "\033[32m[+] \033[0m" + link
 				scurl()
 				for payl in payload:
 					link = url + payl
@@ -48,7 +58,7 @@ if stat == 200:
 					sys.stdout.flush()
 					if status_link == 200:
 						print "\033[32m[+] \033[0m" + link
-				print "ok"			
+				print "ok" # try cve 
 			else:
 				print "plop"
 		else:
@@ -74,5 +84,6 @@ elif stat == 302:
 	print "Moved Temporarily"
 else:
 	print "url not found"
+
 
 
