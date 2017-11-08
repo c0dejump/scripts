@@ -5,13 +5,15 @@ post = "$_POST"
 get = "$_GET"
 i = 1
 
-payloads = ["addslashes","magic_quotes_gpc"]
+payloads = ["addslashes","magic_quotes_gpc","mysql_real_escape_string","intval","is_numeric"]
 
-PRETTY_PLUS = "\033[32m[+] \033[0m"
-PRETTY_LESS = "\033[31m[-] \033[0m"
+PLUS = "\033[32m[+] \033[0m"
+LESS = "\033[33m[-] \033[0m"
+WARN = "\033[31m[!] \033[0m"
+
 
 try:
-	file = open(sys.argv[1],"r").read().split('\n')
+	file = open(sys.argv[1],"r").read().split('\n')[:-1]
 	print "file found"
 except:
 	print "file not found"
@@ -19,19 +21,21 @@ except:
 
 for line in file:
 	if post in line:
-		print PRETTY_PLUS + "variable " + post + " found ligne " + str(i)
+		print PLUS + "variable " + post + " found / ligne " + str(i)
 		for payl in payloads:
 			if payl in line:
-				print "\t" + PRETTY_LESS + "filtre found " + payl + " in " + post
+				print "\t" + LESS + "filtre " + payl + "() in " + post
 	if get in line:
-		print PRETTY_PLUS + "variable " + get + " found"
+		print PLUS + "variable " + get + " found / ligne " + str(i)
 		for payl in payloads:
 			if payl in line:
-				print "\t" + PRETTY_LESS + "filtre found " + payl + " in " + get	
+				print "\t" + LESS + "filtre " + payl + "() in " + get
+	if "echo $_GET" in line or "echo $_POST" in line:
+		print "\t" + WARN + "XSS detected / ligne " + str(i)
 	i += 1
 
 with open(sys.argv[1],"r") as f:
 	for lines in f.readlines():
 		if "@" in lines:
-			print PRETTY_PLUS + "@ disable warning found ligne " + str(i)
+			print PLUS + "@ disable warning found / ligne " + str(i)
 		i += 1 
