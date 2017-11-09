@@ -31,7 +31,7 @@ for line in file:
 			if payl in line:
 				print "\t" + LESS + "filtre " + payl + "() in " + get
 	if "echo $_GET" in line or "echo $_POST" in line:
-		print "\t" + WARN + "XSS detected / ligne " + str(i)
+		print "\t" + WARN + "risk XSS / ligne " + str(i)
 	i += 1
 
 with open(sys.argv[1],"r") as f:
