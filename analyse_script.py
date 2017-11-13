@@ -8,7 +8,8 @@ i = 1
 payloads = ["addslashes","magic_quotes_gpc","mysql_real_escape_string","intval","is_numeric"]
 
 PLUS = "\033[32m[+] \033[0m"
-LESS = "\033[33m[-] \033[0m"
+PFILTR = "\033[33m[+] \033[0m"
+LESS = "\033[31m[-] \033[0m"
 WARN = "\033[31m[!] \033[0m"
 
 
@@ -24,12 +25,20 @@ for line in file:
 		print PLUS + "variable " + post + " found / ligne " + str(i)
 		for payl in payloads:
 			if payl in line:
-				print "\t" + LESS + "filtre " + payl + "() in " + post
+				print "\t" + PFILTR + "filtre " + payl + "() in " + post
+				break
+		if payl not in line:
+			print "\t" + LESS + "no filtre in " + post
+				
 	if get in line:
 		print PLUS + "variable " + get + " found / ligne " + str(i)
 		for payl in payloads:
 			if payl in line:
-				print "\t" + LESS + "filtre " + payl + "() in " + get
+				print "\t" + PFILTR + "filtre " + payl + "() in " + get
+				break
+		if payl not in line:
+			print "\t" + LESS + "no filtre in " + get
+
 	if "echo $_GET" in line or "echo $_POST" in line:
 		print "\t" + WARN + "risk XSS / ligne " + str(i)
 	i += 1
