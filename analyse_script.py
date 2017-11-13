@@ -43,12 +43,9 @@ for line in file:
 		if not found:
 			print "\t" + LESS + "no filtre in " + get
 
+	if "select" in line or "SELECT" in line and "from" in line or "FROM" in line:
+		print PLUS + line.replace("  ","") + " / ligne " + str(i) + "\n"
+
 	if "echo $_GET" in line or "echo $_POST" in line:
 		print "\t" + WARN + "risk XSS / ligne " + str(i)
 	i += 1
-
-with open(sys.argv[1],"r") as f:
-	for lines in f.readlines():
-		if "@" in lines:
-			print PLUS + "@ disable warning found / ligne " + str(i)
-		i += 1 
