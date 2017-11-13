@@ -23,20 +23,24 @@ except:
 for line in file:
 	if post in line:
 		print PLUS + "variable " + post + " found / ligne " + str(i)
+		found = False
 		for payl in payloads:
 			if payl in line:
 				print "\t" + PFILTR + "filtre " + payl + "() in " + post
+				found = True
 				break
-		if payl not in line:
+		if not found:
 			print "\t" + LESS + "no filtre in " + post
 				
 	if get in line:
 		print PLUS + "variable " + get + " found / ligne " + str(i)
+		found = False
 		for payl in payloads:
 			if payl in line:
 				print "\t" + PFILTR + "filtre " + payl + "() in " + get
+				found = True
 				break
-		if payl not in line:
+		if not found:
 			print "\t" + LESS + "no filtre in " + get
 
 	if "echo $_GET" in line or "echo $_POST" in line:
