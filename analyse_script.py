@@ -3,6 +3,7 @@ import re
 
 post = "$_POST"
 get = "$_GET"
+cookie = "$_COOKIE"
 i = 1
 
 payloadsql = ["addslashes","magic_quotes_gpc","mysql_real_escape_string","intval","is_numeric"]
@@ -20,35 +21,34 @@ try:
 except:
 	print "file not found"
 
+def inject(plop):
+	print PLUS + "variable " + plop + " found / ligne " + str(i)
+	found = False
+	for payl in payloadsql:
+		if payl in line:
+			print "\t" + PFILTR + "filtre " + payl + "() in " + plop
+			found = True
+			break
+	if not found:
+		print "\t" + LESS + "no filtre in " + plop
+
 
 for line in file:
 	if post in line:
-		print PLUS + "variable " + post + " found / ligne " + str(i)
-		found = False
-		for payl in payloadsql:
-			if payl in line:
-				print "\t" + PFILTR + "filtre " + payl + "() in " + post
-				found = True
-				break
-		if not found:
-			print "\t" + LESS + "no filtre in " + post
-				
+		inject(post)
+
 	if get in line:
-		print PLUS + "variable " + get + " found / ligne " + str(i)
-		found = False
-		for payl in payloadsql:
-			if payl in line:
-				print "\t" + PFILTR + "filtre " + payl + "() in " + get
-				found = True
-				break
-		if not found:
-			print "\t" + LESS + "no filtre in " + get
+		inject(get)
+
+	if cookie in line:
+		inject(cookie)
 
 	if "select" in line or "SELECT" in line and "from" in line or "FROM" in line:
 		print PLUS + line.replace("  ","") + " / ligne " + str(i) + "\n"
 
 	if "echo $_GET" in line or "echo $_POST" in line:
 		print "\t" + WARN + "risk XSS / ligne " + str(i)
+
 	if "include" in line:
 		print PLUS + "include() found / line " + str(i)
 		find = file.index(line) - 1
