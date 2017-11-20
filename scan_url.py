@@ -1,87 +1,38 @@
-import sys, os
-import requests, urllib, urllib2
-from bs4 import BeautifulSoup
-from parse import *
-import time
+import requests
+import sys
 
 url = sys.argv[1]
 
-def write_response(resp):
-    mon_fichier = open("robots.txt", "w")  #Download file
-    mon_fichier.write(resp.replace('Disallow: /','').replace('#','').replace(' ','').replace('Disallow:*',''))
-    mon_fichier.close()
-
-def scurl(): 
-		dico = raw_input("entrez un dico : ")
-		try:
-			global payload 
-			payload = open(dico,"r").read().split("\n")
-		except:
-			print "dico introuvable"
-			scurl()
+def tryUrl():
+	dico = raw_input("entrez un dico : ")
+	try:
+		global payload 
+		payload = open(dico,"r").read().split("\n")
+	except:
+		print "dico introuvable"
+		tryUrl()
+	for payl in payload:
+		link = url + payl
+		req = requests.get(link)
+		status_link = req.status_code
+		sys.stdout.write(" "+payl+"\r")
+		sys.stdout.flush()
+		if status_link == 200:
+			print "\033[32m[+] \033[0m" + link
+		if status_link == 403:
+			print "\033[33m[+] \033[0m" + link + "\033[33m forbidden \033[0m"
 
 r = requests.get(url)
 stat = r.status_code
-if stat == 200:
+print url
+if stat == 200 or stat == 403:
 	print "url found"
-	rob = url+"robots.txt"
-	r_rob = requests.get(rob)
-	if r_rob.status_code == 200: #try robots.txt
-		print "\033[32m[+] \033[0m"+url+"robots.txt/ [found]"
-		affi = raw_input("afficher le contenue de robots.txt ? y/n : ")
-		if affi == 'y':
-			page = urllib.urlopen(rob)
-			resp = page.read()
-			page.close()
-			print resp
-			write_response(resp)
-			curl = raw_input("tester les urls ? y/n : \n")   #try urls
-			if curl == "y":
-				print("test url robots.txt")
-				payl_Rob = open("robots.txt","r").read().split("\n")
-				for paylo in payl_Rob:
-					link = url + paylo
-					req = requests.get(link)
-					status_link = req.status_code
-					sys.stdout.write(" "+paylo+"\r")
-					sys.stdout.flush()
-					if status_link == 200 and "404" not in req.text:
-						print "\033[32m[+] \033[0m" + link
-				scurl()
-				for payl in payload:
-					link = url + payl
-					req = requests.get(link)
-					status_link = req.status_code
-					sys.stdout.write(" "+payl+"\r")
-					sys.stdout.flush()
-					if status_link == 200:
-						print "\033[32m[+] \033[0m" + link
-				print "ok" # try cve 
-			else:
-				print "plop"
-		else:
-			curl = raw_input("tester les urls ? y/n : ")   #try urls
-			if curl == "y":
-				scurl()
-				for payl in payload:
-					link = url + payl
-					req = requests.get(link)
-					status_link = req.status_code
-					sys.stdout.write(" "+payl+"\r")
-					sys.stdout.flush()
-					if status_link == 200:
-						print "\033[32m[+] \033[0m" + link
-				print "ok"
-			else:
-				print "plop"
-	else:
-		print "robots.txt not found"
+	tryUrl()
 elif stat == 301:
 	print "HTTP/2.0 301 Moved Permanently"
+	tryUrl()
 elif stat == 302:
 	print "Moved Temporarily"
+	tryUrl()
 else:
 	print "url not found"
-
-
-
