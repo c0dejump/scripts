@@ -1,5 +1,3 @@
-#A python script which pentest a website with CVEs and other stuff...( in development)
-
 import sys, os
 import requests, urllib, urllib2
 from bs4 import BeautifulSoup
