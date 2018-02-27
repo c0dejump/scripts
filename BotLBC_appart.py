@@ -91,13 +91,14 @@ while 1:
 
 					print "*" * 15
 					print "resultat : " + str(res) #nombre de resultat trouver
-		i = 0
-		scd = 1800
+
+		scd = 1800# = 30min
 		tim = scd / 60
-		while i < tim:
+		i = tim
+		while i != 0:
 			sys.stdout.write(str(tim) +" min avant renvoi : " + str(i) +" min... \r")
 			sys.stdout.flush()
 			time.sleep(60)
-			i =+ 1
+			i -= 1
 		res = 0
 		i = 0
