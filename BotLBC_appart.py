@@ -21,6 +21,9 @@ today = date.today()
 a_h = today.day - 2 #avant hier
 a_ah = today.day - 3# avant avant hier
 
+#département "pays_de_la_loire".....
+depart = "ile_de_france/hauts_de_seine"
+
 #Villes :
 ville = [
 		u"Sèvre",
@@ -53,7 +56,7 @@ while 1:
 	ua = UserAgent()
 	user_agent = {'User-agent': ua.random} #changement d'user-agent (random)
 	for c in ville:
-		url = "https://www.leboncoin.fr/locations/offres/ile_de_france/hauts_de_seine/?th=" + page + "&mre=" + prix_max + "&sqe=" + surface + "&ret=2&furn=" + m
+		url = "https://www.leboncoin.fr/locations/offres/" + depart + "/?th=" + page + "&mre=" + prix_max + "&sqe=" + surface + "&ret=2&furn=" + m
 		print url
 		req = requests.get(url, headers=user_agent)
 		stat = req.status_code
@@ -92,13 +95,17 @@ while 1:
 					print "*" * 15
 					print "resultat : " + str(res) #nombre de resultat trouver
 
-		scd = 1800# = 30min
+		scd = 1200
 		tim = scd / 60
-		i = tim
+		i = tim - 1
+		s = 60
 		while i != 0:
-			sys.stdout.write(str(tim) +" min avant renvoi : " + str(i) +" min... \r")
-			sys.stdout.flush()
-			time.sleep(60)
+			while s != 0:
+				sys.stdout.write(str(tim) +" min avant renvoi : " + str(i) + "m" + str(s) + " ... \r")
+				sys.stdout.flush()
+				time.sleep(10)
+				s -= 10
+			s = 60
 			i -= 1
 		res = 0
 		i = 0
