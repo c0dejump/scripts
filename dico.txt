@@ -11,13 +11,14 @@ annonce.php
 annonces.php
 connexion
 connexion.php
+secret.php
+.htpasswd
 wp-admin
+wp-admin/js
+wp-admin/includes
 wp-admin.php
 wp-login
 wp-login.php
-secret.php
-login
-.htpasswd
 wp-content/uploads
 wp-content/debug.log
 login.php
@@ -35,6 +36,7 @@ mail
 functions.inc.php
 config
 accueil
+usercontrols
 ~
 ~adm
 ~admin
@@ -52,6 +54,7 @@ accueil
 ~user
 ~webmaster
 ~www
+ww2
 index.bak
 index.php.bak
 admin.bak
@@ -60,6 +63,10 @@ themes
 backup
 backup_old
 old
+.old
+?id=1
+?page=
+?action=
 users
 search
 login
@@ -1372,6 +1379,8 @@ docs
 docs41
 docs51
 doctor
+Document
+Documents
 document
 documentacio
 documentacion
@@ -1817,6 +1826,8 @@ gone
 goober
 goofy
 google
+googledrive
+GoogleDrive
 gopher
 gora
 gordon
@@ -3726,6 +3737,9 @@ svc
 svn
 svr
 sw
+metrics
+beans
+heapdump
 swearer
 sweetie
 sweetpea
@@ -3743,6 +3757,7 @@ sysadmin
 system
 system_web
 web.config
+web.xml
 t
 t-bone
 t1
@@ -4121,6 +4136,7 @@ webmaste
 webmaster
 webmasters
 websearch
+webservice
 website
 webstat
 webstats
@@ -4229,6 +4245,7 @@ xml
 xmlrpc
 xmodem
 xsl
+xslt
 xsql
 xxx
 xxxx
