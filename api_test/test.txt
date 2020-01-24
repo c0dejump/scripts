@@ -1,0 +1,15 @@
+users/
+user/
+v1/account/accounts
+v1/account/accounts/summaries
+v1/account/oauth/token
+v1/account/oauth/ticket
+v1/account/permissions
+v1/account/user
+v1/account/user/assets
+v1/account/user/delete
+v1/account/user/profile
+core-resources/
+v1/account/user/register
+v1/account/user/resend-verification
+v1/account/user/verify
