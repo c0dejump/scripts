@@ -1,8 +1,0 @@
-api
-ext-api
-sandbox-api
-api-test
-apis
-api.php
-api.www
-api-beta
