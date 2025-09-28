@@ -1,35 +1,31 @@
 #!/bin/bash
 
 usage() {
-    echo "Usage: $0 -f fichier_urls.txt -o fichier_sortie [-e codes_a_exclure] [-s]"
+    echo "Usage: $0 -f input_file.txt -o output_file [-e exclude_code] [-s] [-t size_threshold] [-b blacklist_file]"
     echo
     echo "Options :"
     echo "  -f    Input file containing URLs (or domains if -s is used)"
     echo "  -o    Output file for valid URLs"
-    echo "  -e    HTTP codes to exclude (e.g. 400 404 500) [default: 400 404 405 500 501 502]"
-    echo "  -s    Use subfinder on input file to discover subdomains"
+    echo "  -e    HTTP codes to exclude (e.g. 400 404 500) [default: 400 403 404 405 500 501 502 503]"
+    echo "  -s    Use multiple subdomain discovery tools on input file"
+    echo "  -t    Size threshold in bytes to consider responses different [default: 150]"
+    echo "  -b    Blacklist file containing domains/patterns to exclude (one per line)"
     exit 1
 }
 
 use_subfinder=false
+SIZE_THRESHOLD=150
+blacklist_file=""
 
-while getopts ":f:o:e:s" opt; do
+while getopts ":f:o:e:st:b:" opt; do
   case ${opt} in
-    f )
-      input_file=$OPTARG
-      ;;
-    o )
-      output_file=$OPTARG
-      ;;
-    e )
-      BAD_CODES=$OPTARG
-      ;;
-    s )
-      use_subfinder=true
-      ;;
-    \? )
-      usage
-      ;;
+    f ) input_file="$OPTARG" ;;
+    o ) output_file="$OPTARG" ;;
+    e ) BAD_CODES="$OPTARG" ;;
+    s ) use_subfinder=true ;;
+    t ) SIZE_THRESHOLD="$OPTARG" ;;
+    b ) blacklist_file="$OPTARG" ;;
+    \? ) usage ;;
   esac
 done
 
@@ -38,29 +34,324 @@ if [ -z "$input_file" ] || [ -z "$output_file" ]; then
 fi
 
 if [ -z "$BAD_CODES" ]; then
-    BAD_CODES="400 404 405 500 501 502"
+    BAD_CODES="400 403 404 405 500 501 502 503"
 fi
 
-if [ "$use_subfinder" = true ]; then
-    echo "[*] Subfinder Execution on $input_file..."
-    subfinder -dL "$input_file" -o subdoms.txt
-    if [ $? -ne 0 ]; then
-        echo "Error with subfinder."
+# Créer une blacklist par défaut si aucune n'est fournie
+blacklist_created=false
+if [ -z "$blacklist_file" ]; then
+    blacklist_file=$(mktemp)
+    blacklist_created=true
+    cat > "$blacklist_file" << 'EOF'
+login.microsoftonline.com
+outlook.office365.com
+portal.office.com
+login.windows.net
+accounts.google.com
+accounts.youtube.com
+signin.aws.amazon.com
+console.aws.amazon.com
+login.salesforce.com
+secure.salesforce.com
+login.yahoo.com
+signin.ebay.com
+secure.paypal.com
+checkout.paypal.com
+login.live.com
+account.microsoft.com
+login.skype.com
+auth0.com
+EOF
+    echo "[*] Utilisation de la blacklist par défaut ($(wc -l < "$blacklist_file") entrées)"
+else
+    if [ ! -f "$blacklist_file" ]; then
+        echo "[!] ERREUR: Le fichier de blacklist $blacklist_file n'existe pas !"
         exit 1
     fi
-    input_file="subdoms.txt"
+    echo "[*] Utilisation de la blacklist: $blacklist_file ($(wc -l < "$blacklist_file") entrées)"
 fi
 
+# Fonction pour vérifier si un domaine/URL est dans la blacklist
+is_blacklisted() {
+    local url="$1"
+    local domain
+    domain=$(echo "$url" | sed 's|^https\?://||' | cut -d'/' -f1)
+    
+    # Vérifier contre chaque entrée de la blacklist
+    while read -r blacklist_entry; do
+        # Ignorer les lignes vides et les commentaires
+        [ -z "$blacklist_entry" ] && continue
+        [[ "$blacklist_entry" =~ ^#.*$ ]] && continue
+        
+        # Support des wildcards avec *
+        if [[ "$blacklist_entry" == *"*"* ]]; then
+            # Convertir le pattern wildcard en regex
+            local pattern
+            pattern=$(echo "$blacklist_entry" | sed 's/\./\\./g' | sed 's/\*/.*/')
+            if [[ "$domain" =~ $pattern ]]; then
+                return 0
+            fi
+        else
+            # Correspondance exacte
+            if [ "$domain" = "$blacklist_entry" ]; then
+                return 0
+            fi
+        fi
+    done < "$blacklist_file"
+    
+    return 1
+}
+
+discover_subdomains() {
+    local input_file="$1"
+    local temp_subdoms="subdoms_combined.txt"
+    local found_tools=0
+    local total_domains
+    total_domains=$(wc -l < "$input_file")
+    
+    echo "[*] Découverte de sous-domaines avec plusieurs outils sur $total_domains domaine(s)..." >&2
+    echo "[*] Contenu du fichier d'entrée:" >&2
+    head -5 "$input_file" | while read -r line; do 
+        echo "    - $line" >&2
+    done
+    if [ "$total_domains" -gt 5 ]; then
+        echo "    ... et $((total_domains - 5)) autres" >&2
+    fi
+    echo "" >&2
+    
+    > "$temp_subdoms"
+    
+    # Subfinder
+    if command -v subfinder >/dev/null 2>&1; then
+        echo "[+] $(date '+%H:%M:%S') - Lancement de subfinder..." >&2
+        echo "[+] Commande: subfinder -dL $input_file -silent" >&2
+        
+        subfinder -dL "$input_file" -silent > subfinder_temp.txt 2>&1 &
+        subfinder_pid=$!
+        
+        local elapsed=0
+        while kill -0 $subfinder_pid 2>/dev/null; do
+            sleep 2
+            elapsed=$((elapsed + 2))
+            local current_results=0
+            if [ -f subfinder_temp.txt ]; then
+                current_results=$(wc -l < subfinder_temp.txt 2>/dev/null || echo 0)
+            fi
+            echo -ne "[+] subfinder en cours... ${elapsed}s - $current_results résultats trouvés\r" >&2
+            
+            if [ "$elapsed" -gt 120 ]; then
+                echo -e "\n[!] Timeout subfinder après 120s, on l'arrête..." >&2
+                kill $subfinder_pid 2>/dev/null
+                break
+            fi
+        done
+        
+        wait $subfinder_pid 2>/dev/null
+        local exit_code=$?
+        
+        if [ -f subfinder_temp.txt ] && [ -s subfinder_temp.txt ]; then
+            cat subfinder_temp.txt >> "$temp_subdoms"
+            local count
+            count=$(wc -l < subfinder_temp.txt)
+            echo -e "\n[✓] $(date '+%H:%M:%S') - subfinder terminé - $count résultats trouvés" >&2
+            found_tools=$((found_tools + 1))
+            rm subfinder_temp.txt
+        else
+            echo -e "\n[✗] $(date '+%H:%M:%S') - subfinder a échoué (code: $exit_code)" >&2
+            [ -f subfinder_temp.txt ] && rm subfinder_temp.txt
+        fi
+    else
+        echo "[!] subfinder non installé, passage au suivant..." >&2
+    fi
+    
+    # Assetfinder
+    if command -v assetfinder >/dev/null 2>&1; then
+        echo "[+] $(date '+%H:%M:%S') - Lancement d'assetfinder..." >&2
+        local assetfinder_temp
+        assetfinder_temp=$(mktemp)
+        local domains_processed=0
+        
+        while read -r domain; do
+            if [ -n "$domain" ]; then
+                domains_processed=$((domains_processed + 1))
+                echo -ne "[+] assetfinder: traitement $domains_processed/$total_domains - domaine: $domain\r" >&2
+                
+                timeout 30 assetfinder --subs-only "$domain" >> "$assetfinder_temp" 2>/dev/null
+                local current_results
+                current_results=$(wc -l < "$assetfinder_temp" 2>/dev/null || echo 0)
+                echo -ne "[+] assetfinder: $domains_processed/$total_domains - $current_results résultats\r" >&2
+            fi
+        done < "$input_file"
+        
+        if [ -s "$assetfinder_temp" ]; then
+            cat "$assetfinder_temp" >> "$temp_subdoms"
+            local count
+            count=$(wc -l < "$assetfinder_temp")
+            echo -e "\n[✓] $(date '+%H:%M:%S') - assetfinder terminé - $count résultats trouvés" >&2
+            found_tools=$((found_tools + 1))
+        else
+            echo -e "\n[✗] $(date '+%H:%M:%S') - assetfinder n'a trouvé aucun résultat" >&2
+        fi
+        rm -f "$assetfinder_temp"
+    else
+        echo "[!] assetfinder non installé, passage au suivant..." >&2
+    fi
+    
+    # Amass
+    if command -v amass >/dev/null 2>&1; then
+        echo "[+] $(date '+%H:%M:%S') - Lancement d'amass (mode passif)..." >&2
+        echo "[+] Commande: amass enum -passive -df $input_file" >&2
+        
+        amass enum -passive -df "$input_file" -o amass_temp.txt >/dev/null 2>&1 &
+        amass_pid=$!
+        
+        local elapsed=0
+        while kill -0 $amass_pid 2>/dev/null; do
+            sleep 3
+            elapsed=$((elapsed + 3))
+            local current_results=0
+            if [ -f amass_temp.txt ]; then
+                current_results=$(wc -l < amass_temp.txt 2>/dev/null || echo 0)
+            fi
+            echo -ne "[+] amass en cours... ${elapsed}s - $current_results résultats trouvés\r" >&2
+            
+            if [ "$elapsed" -gt 300 ]; then
+                echo -e "\n[!] Timeout amass après 300s, on l'arrête..." >&2
+                kill $amass_pid 2>/dev/null
+                break
+            fi
+        done
+        
+        wait $amass_pid 2>/dev/null
+        
+        if [ -f amass_temp.txt ] && [ -s amass_temp.txt ]; then
+            cat amass_temp.txt >> "$temp_subdoms"
+            local count
+            count=$(wc -l < amass_temp.txt)
+            echo -e "\n[✓] $(date '+%H:%M:%S') - amass terminé - $count résultats trouvés" >&2
+            found_tools=$((found_tools + 1))
+            rm amass_temp.txt
+        else
+            echo -e "\n[✗] $(date '+%H:%M:%S') - amass n'a trouvé aucun résultat" >&2
+            [ -f amass_temp.txt ] && rm amass_temp.txt
+        fi
+    else
+        echo "[!] amass non installé, passage au suivant..." >&2
+    fi
+    
+    echo "" >&2
+    echo "[*] $(date '+%H:%M:%S') - Résumé de la découverte: $found_tools outil(s) ont fonctionné" >&2
+    
+    if [ "$found_tools" -eq 0 ]; then
+        echo "[!] Aucun outil de découverte disponible, utilisation du fichier d'entrée original..." >&2
+        cp "$input_file" "$temp_subdoms"
+    fi
+    
+    if [ -s "$temp_subdoms" ]; then
+        echo "[*] $(date '+%H:%M:%S') - Nettoyage et déduplication en cours..." >&2
+        local before_count
+        before_count=$(wc -l < "$temp_subdoms")
+        echo "[*] Avant nettoyage: $before_count lignes" >&2
+        
+        # Nettoyage standard + application de la blacklist
+        sort -u "$temp_subdoms" | grep -v '^$' | grep -E '^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$' > "$temp_subdoms.clean"
+        
+        # Appliquer la blacklist
+        local temp_filtered
+        temp_filtered=$(mktemp)
+        > "$temp_filtered"
+        
+        while read -r domain; do
+            if ! is_blacklisted "$domain"; then
+                echo "$domain" >> "$temp_filtered"
+            fi
+        done < "$temp_subdoms.clean"
+        
+        mv "$temp_filtered" "$temp_subdoms.clean"
+        mv "$temp_subdoms.clean" "$temp_subdoms"
+        
+        local final_count
+        final_count=$(wc -l < "$temp_subdoms")
+        local filtered_count=$((before_count - final_count))
+        echo "[✓] $(date '+%H:%M:%S') - $final_count sous-domaines uniques découverts au total" >&2
+        echo "[*] $filtered_count domaines filtrés par la blacklist" >&2
+        echo "[*] Aperçu des premiers résultats:" >&2
+        head -10 "$temp_subdoms" | while read -r line; do 
+            echo "    - $line" >&2
+        done
+        if [ "$final_count" -gt 10 ]; then
+            echo "    ... et $((final_count - 10)) autres" >&2
+        fi
+        echo "" >&2
+    else
+        echo "[!] Aucun sous-domaine trouvé, utilisation du fichier d'entrée original..." >&2
+        cp "$input_file" "$temp_subdoms"
+    fi
+    
+    echo "$temp_subdoms"
+}
+
+if [ "$use_subfinder" = true ]; then
+    echo "[*] $(date '+%H:%M:%S') - Découverte de sous-domaines sur $input_file..."
+    echo "[*] Vérification de l'existence du fichier..."
+    
+    if [ ! -f "$input_file" ]; then
+        echo "[!] ERREUR: Le fichier $input_file n'existe pas !"
+        exit 1
+    fi
+    
+    if [ ! -s "$input_file" ]; then
+        echo "[!] ERREUR: Le fichier $input_file est vide !"
+        exit 1
+    fi
+    
+    echo "[*] Fichier trouvé et non vide, lancement de la découverte..."
+    
+    discovered_file=$(discover_subdomains "$input_file")
+    discovery_exit_code=$?
+    
+    echo "[*] $(date '+%H:%M:%S') - Découverte terminée avec le code: $discovery_exit_code"
+    echo "[*] DEBUG - Fichier découvert: '$discovered_file'"
+    
+    if [ -f "$discovered_file" ]; then
+        local discovered_count
+        discovered_count=$(wc -l < "$discovered_file")
+        echo "[*] DEBUG - Le fichier $discovered_file contient $discovered_count lignes"
+        
+        if [ "$discovered_count" -gt 0 ]; then
+            input_file="$discovered_file"
+            echo "[+] Fichier de sous-domaines créé : $discovered_file ($discovered_count domaines)"
+            echo "[+] Passage au scan des URLs découvertes..."
+        else
+            echo "[!] Le fichier découvert est vide, utilisation du fichier original : $input_file"
+        fi
+    else
+        echo "[!] Le fichier découvert n'existe pas: '$discovered_file', utilisation du fichier original : $input_file"
+    fi
+fi
+
+seen_urls_file=$(mktemp)
+final_urls_file=$(mktemp)
 > "$output_file"
 
-USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-ACCEPT_ENCODING="gzip"
+USER_AGENT="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+ACCEPT_ENCODING="gzip, deflate"
 
 total_urls=$(wc -l < "$input_file")
+echo "[*] DEBUG - Fichier d'entrée final: $input_file"
+echo "[*] DEBUG - Nombre total d'URLs à scanner: $total_urls"
+
 if [ "$total_urls" -eq 0 ]; then
-    echo "The file is empty"
+    echo "[!] ERREUR: Le fichier final est vide !"
+    echo "[*] Contenu du fichier:"
+    cat "$input_file"
     exit 1
 fi
+
+echo "[*] DEBUG - Aperçu du fichier à scanner:"
+head -5 "$input_file" | while read -r line; do 
+    echo "    - $line"
+done
 
 temp_file=$(mktemp)
 echo 0 > "$temp_file"
@@ -71,45 +362,175 @@ export BAD_CODES
 export USER_AGENT
 export ACCEPT_ENCODING
 export output_file
+export SIZE_THRESHOLD
+export seen_urls_file
+export final_urls_file
+export blacklist_file
 
 show_progress() {
-    current_url=$(cat "$temp_file")  
-    percent=$((100 * current_url / total_urls))
+    local current_url
+    current_url=$(cat "$temp_file")
+    local percent=$((100 * current_url / total_urls))
+    local bar_width=50
+    local filled=$((bar_width * percent / 100))
+    local bar
+    bar=$(printf "%0.s█" $(seq 1 $filled))
+    bar+=$(printf "%0.s░" $(seq $filled $((bar_width - 1))))
     
-    bar_width=50
-    filled=$((bar_width * percent / 100))
+    local elapsed=$(($(date +%s) - start_time))
+    local rate=0
+    local eta_seconds=0
+    local eta_display="--:--"
     
-    bar=""
-    for i in $(seq 1 $filled); do bar="${bar}#"; done
-    for i in $(seq $filled $((bar_width - 1))); do bar="${bar} "; done
+    if [ "$current_url" -gt 0 ] && [ "$elapsed" -gt 0 ]; then
+        rate=$((current_url * 100 / elapsed))
+        if [ "$rate" -gt 0 ]; then
+            eta_seconds=$(( (total_urls - current_url) * 100 / rate ))
+            eta_display=$(printf "%02d:%02d" $((eta_seconds / 60)) $((eta_seconds % 60)))
+        fi
+    fi
     
-    echo -ne "[$bar] $percent% ($current_url/$total_urls)\r"
+    echo -ne "[$bar] $percent% ($current_url/$total_urls) ETA: $eta_display\r"
 }
 
-check_url() {
-    url="$1"
-    response_code=$(curl -L -k -s -o /dev/null -w "%{http_code}" --max-time 15 \
-        -A "$USER_AGENT" -H "Accept-Encoding: $ACCEPT_ENCODING" "$url")
-
-    if [ "$response_code" == "000" ]; then return; fi
-
-    if [[ ! $BAD_CODES =~ $response_code ]]; then
-        if [[ ! "$url" =~ \/(index\.php|index\.html|api\/|[^/]+$) ]]; then
-            url="$url/"
+follow_redirects() {
+    local url="$1"
+    local max_redirects=10
+    local current_url="$url"
+    
+    for i in $(seq 1 $max_redirects); do
+        local response
+        response=$(curl -k -s -o /dev/null -w "%{http_code} %{redirect_url} %{size_download}" \
+            --max-time 15 -A "$USER_AGENT" -H "Accept-Encoding: $ACCEPT_ENCODING" "$current_url")
+        
+        local code redirect_url size
+        read -r code redirect_url size <<< "$response"
+        
+        if [[ "$code" =~ ^(301|302|307|308)$ ]] && [ -n "$redirect_url" ]; then
+            current_url="$redirect_url"
+        else
+            echo "$code $current_url $size"
+            return
         fi
-        echo "$url" >> "$output_file"
+    done
+    
+    echo "000 $url 0"
+}
+
+is_url_seen() {
+    local url="$1"
+    local normalized_url
+    normalized_url=$(echo "$url" | sed 's|/$||')
+    grep -q "^$normalized_url$" "$seen_urls_file" 2>/dev/null
+}
+
+add_seen_url() {
+    local url="$1"
+    local normalized_url
+    normalized_url=$(echo "$url" | sed 's|/$||')
+    echo "$normalized_url" >> "$seen_urls_file"
+}
+
+check_url_advanced() {
+    local domain="$1"
+    local url_https="https://$domain"
+    local url_http="http://$domain"
+    
+    # Vérifier la blacklist avant de faire les requêtes
+    if is_blacklisted "$domain"; then
+        return
+    fi
+    
+    local https_response
+    https_response=$(follow_redirects "$url_https")
+    local code_https final_url_https size_https
+    read -r code_https final_url_https size_https <<< "$https_response"
+    
+    local http_response
+    http_response=$(follow_redirects "$url_http")
+    local code_http final_url_http size_http
+    read -r code_http final_url_http size_http <<< "$http_response"
+    
+    local https_valid=false
+    local http_valid=false
+    
+    if [ "$code_https" = "200" ]; then
+        # Vérifier si l'URL finale n'est pas blacklistée après redirection
+        if ! is_blacklisted "$final_url_https"; then
+            https_valid=true
+        fi
+    fi
+    
+    if [ "$code_http" = "200" ]; then
+        # Vérifier si l'URL finale n'est pas blacklistée après redirection
+        if ! is_blacklisted "$final_url_http"; then
+            http_valid=true
+        fi
+    fi
+    
+    if [ "$https_valid" = false ] && [ "$http_valid" = false ]; then
+        return
+    fi
+    
+    if [ "$https_valid" = true ] && ! is_url_seen "$final_url_https"; then
+        if [ "$http_valid" = true ]; then
+            local diff_size=$(( size_https > size_http ? size_https - size_http : size_http - size_https ))
+            
+            if [ "$final_url_https" = "$final_url_http" ] || [ "$diff_size" -le "$SIZE_THRESHOLD" ]; then
+                echo "$final_url_https" >> "$final_urls_file"
+                add_seen_url "$final_url_https"
+                add_seen_url "$final_url_http"
+            else
+                echo "$final_url_https" >> "$final_urls_file"
+                add_seen_url "$final_url_https"
+                
+                if ! is_url_seen "$final_url_http"; then
+                    echo "$final_url_http" >> "$final_urls_file"
+                    add_seen_url "$final_url_http"
+                fi
+            fi
+        else
+            echo "$final_url_https" >> "$final_urls_file"
+            add_seen_url "$final_url_https"
+        fi
+    elif [ "$http_valid" = true ] && ! is_url_seen "$final_url_http"; then
+        echo "$final_url_http" >> "$final_urls_file"
+        add_seen_url "$final_url_http"
     fi
 }
 
-export -f check_url
+export -f check_url_advanced
 export -f show_progress
+export -f follow_redirects
+export -f is_url_seen
+export -f add_seen_url
+export -f is_blacklisted
 
-cat "$input_file" | sed 's|^https\?://||' | xargs -P 50 -I {} bash -c '
-    current_url=$(cat "$temp_file")  
-    current_url=$((current_url + 1))  
-    echo $current_url > "$temp_file"  
-    check_url "https://{}" && check_url "http://{}"
+echo "[*] Scan des URLs en cours..."
+echo "[*] Utilisation de 30 processus parallèles pour accélérer le scan..."
+
+start_time=$(date +%s)
+export start_time
+
+cat "$input_file" | sed 's|^https\?://||' | xargs -P 30 -I {} bash -c '
+    current_url=$(cat "$temp_file")
+    current_url=$((current_url + 1))
+    echo $current_url > "$temp_file"
+    check_url_advanced "{}"
     show_progress
 '
 
-echo -e "\nScan finish. Results in $output_file."
+echo -e "\n[*] Finalisation: tri et déduplication des résultats..."
+sort -u "$final_urls_file" > "$output_file"
+
+final_count=$(wc -l < "$output_file")
+total_time=$(($(date +%s) - start_time))
+echo "[✓] Scan terminé en ${total_time}s ! $final_count URLs uniques trouvées dans $output_file."
+
+rm -f "$temp_file" "$seen_urls_file" "$final_urls_file"
+[ -f "subdoms_combined.txt" ] && rm -f "subdoms_combined.txt"
+
+# Nettoyer la blacklist temporaire si elle a été créée automatiquement
+if [ "$blacklist_created" = true ]; then
+    rm -f "$blacklist_file"
+fi
