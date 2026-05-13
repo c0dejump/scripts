@@ -1,1 +1,2 @@
-some tools for analysis and security in python
+- sAImap.sh - Subdomain AI mapping / Multi-tool Subdomain & HTTP Scanner (make with claude)
+- fakidity.py - script to make fake identify by Faker python lib
