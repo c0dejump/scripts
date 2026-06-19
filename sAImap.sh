@@ -11,13 +11,17 @@ set -uo pipefail
 VERSION="5.0"
 
 # --- Terminal colors
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YEL='\033[1;33m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
-DIM='\033[2m'
-NC='\033[0m'
+# NOTE: ANSI-C quoting ($'...') so the ESC byte is baked into the variable
+# itself. With plain '...' quoting, `echo -e` worked (it interprets \033)
+# but `cat <<EOF` (used in print_usage) does NOT interpret backslash escapes,
+# so -h printed the literal text "\033[0;36m" instead of actual colors.
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YEL=$'\033[1;33m'
+CYAN=$'\033[0;36m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+NC=$'\033[0m'
 
 # --- Default configuration
 THREADS=50
@@ -62,6 +66,11 @@ TIMEOUT_PER_DOMAIN_DEEP=600
 
 # --- HTTP status codes accepted (final code after redirects)
 HTTP_ACCEPT="200"
+
+# --- Best-effort sweep of stale temp dirs from a previous run that was
+# killed with SIGKILL (kill -9 / OOM / power loss) and never hit the
+# cleanup() trap below. Normal exits (incl. Ctrl+C) already self-clean.
+find /tmp -maxdepth 1 -type d -name 'sAImap_*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 
 # --- Temporary directory
 TEMP_DIR=$(mktemp -d -t sAImap_XXXXXXXX)
